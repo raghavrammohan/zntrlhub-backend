@@ -64,7 +64,7 @@ class Wati:
     def get_connection_status(self):
         url = f"{self.api_endpoint}/api/v1/getContacts"
         try:
-            res = requests.get(url, headers=self._get_headers(), timeout=90)
+            res = requests.get(url, headers=self._get_headers(), timeout=10)
             res.raise_for_status()
             return True
         except Exception as exc:

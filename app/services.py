@@ -1,3 +1,6 @@
+from datetime import timedelta
+from django.utils import timezone
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
@@ -8,7 +11,7 @@ from app.wati import Wati
 from .serializers import (AccountSerializer, UserSerializer, VisitorSerializer,
                           AnalyticsSerializer, SegmentationSerializer, WatiAttributeSerializer,
                           CampaignSerializer, MessageSerializer)
-from .models import Visitor, WatiAttribute, WatiTemplate
+from .models import Analytics, Visitor, Message, WatiAttribute, WatiTemplate, WatiMessage, VisitorSegmentationMap
 
 User = get_user_model()
 
@@ -107,6 +110,18 @@ class SegmentationService:
     def delete(cls, instance):
         instance.delete()
 
+    @classmethod
+    def update_visitor_segmentation_mapping(cls, segmentation):
+        visitors = Analytics.objects.get_unique_visitor_for_account(account=segmentation.account,
+                                                                    query=segmentation.rql_query)
+        visitor_segmentation_map_objs = []
+        for visitor in visitors:
+            visitor_segmentation_map, _ = VisitorSegmentationMap.objects.get_or_create(visitor_id=visitor,
+                                                                                        segmentation=segmentation)
+            visitor_segmentation_map_objs.append(visitor_segmentation_map)
+        VisitorSegmentationMap.objects.exclude(pk__in=[obj.pk for obj in visitor_segmentation_map_objs]).delete()
+        return visitor_segmentation_map_objs
+
 
 class WatiService:
     @classmethod
@@ -175,6 +190,57 @@ class WatiService:
             instances.append(instance)
 
         WatiTemplate.objects.bulk_create(instances)
+
+    @classmethod
+    def process_wati_event(cls, event_body):
+        event_type = event_body.get('eventType')
+        if event_type == 'sentMessageDELIVERED':
+            WatiService.process_message_delivered(event_body)
+        elif event_type == 'sentMessageREAD':
+            WatiService.process_message_delivered(event_body)
+
+    @classmethod
+    def process_message_delivered(cls, event_body):
+        wati_message_id = event_body.get('whatsappMessageId')
+        try:
+            wati_message = WatiMessage.objects.get(wati_message_id=wati_message_id)
+        except WatiMessage.DoesNotExist:
+            return
+        if wati_message.message.action == Message.ON_MESSAGE_DELIVERED:
+            eta = timezone.now() + timedelta(minutes=wati_message.message.schedule)
+            from app.tasks import schedule_message
+            schedule_message.apply_async(wati_message.message, WatiService.get_reciever_for_visitor(wati_message.visitor), eta=eta)
+
+    @classmethod
+    def process_message_read(cls, event_body):
+        wati_message_id = event_body.get('whatsappMessageId')
+        try:
+            wati_message = WatiMessage.objects.get(wati_message_id=wati_message_id)
+        except WatiMessage.DoesNotExist:
+            return
+        if wati_message.message.action == Message.ON_MESSAGE_READ:
+            eta = timezone.now() + timedelta(minutes=wati_message.message.schedule)
+            from app.tasks import schedule_message
+            schedule_message.apply_async(wati_message.message, WatiService.get_reciever_for_visitor(wati_message.visitor), eta=eta)
+
+    @classmethod
+    def get_reciever_for_visitor(cls, visitor):
+        receiver = [
+            {
+                "whatsappNumber": "string",
+                "customParams": [
+                    {
+                    "name": "name",
+                    "value": visitor.name,
+                    },
+                    {
+                    "name": "phone",
+                    "value": visitor.whatsapp_number,
+                    }
+                ]
+            }
+        ]
+        return receiver
 
 
 class CampaignService:
