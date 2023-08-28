@@ -81,6 +81,46 @@ class AnalyticsService:
         return analytics
 
 
+class CampaignService:
+    @classmethod
+    def create(cls, data):
+        account = get_current_account()
+        data['account'] = account.id
+
+        campaign_serializer = CampaignSerializer(data=data)
+        campaign_serializer.is_valid(raise_exception=True)
+
+        campaign = campaign_serializer.save()
+
+        return campaign
+
+    @classmethod
+    def update(cls, instance, data, partial=False):
+        account = get_current_account()
+        data['account'] = account.id
+
+        campaign_serializer = CampaignSerializer(instance, data=data, partial=partial)
+        campaign_serializer.is_valid(raise_exception=True)
+
+        campaign = campaign_serializer.save()
+
+        return campaign
+
+    @classmethod
+    def delete(cls, instance):
+        instance.delete()
+
+    @classmethod
+    def schedule_initial_message(cls, campaign, visitors):
+        if not campaign.messages.first():
+            return
+        message = campaign.messages.first().get_head_message()
+        MessageService.schedule_message(
+            message=message,
+            receivers=visitors
+        )
+
+
 class SegmentationService:
     @classmethod
     def create(cls, data):
@@ -115,11 +155,21 @@ class SegmentationService:
         visitors = Analytics.objects.get_unique_visitor_for_account(account=segmentation.account,
                                                                     query=segmentation.rql_query)
         visitor_segmentation_map_objs = []
+        created_objs = []
         for visitor in visitors:
-            visitor_segmentation_map, _ = VisitorSegmentationMap.objects.get_or_create(visitor_id=visitor,
+            visitor_segmentation_map, created = VisitorSegmentationMap.objects.get_or_create(visitor_id=visitor,
                                                                                         segmentation=segmentation)
             visitor_segmentation_map_objs.append(visitor_segmentation_map)
+            if created:
+                created_objs.append(visitor_segmentation_map)
         VisitorSegmentationMap.objects.exclude(pk__in=[obj.pk for obj in visitor_segmentation_map_objs]).delete()
+
+        for campaign in segmentation.get_campaigns():
+            CampaignService.schedule_initial_message(
+                campaign=campaign,
+                visitors=[obj.visitor for obj in created_objs]
+            )
+
         return visitor_segmentation_map_objs
 
 
@@ -207,9 +257,12 @@ class WatiService:
         except WatiMessage.DoesNotExist:
             return
         if wati_message.message.action == Message.ON_MESSAGE_DELIVERED:
-            eta = timezone.now() + timedelta(minutes=wati_message.message.schedule)
-            from app.tasks import schedule_message
-            schedule_message.apply_async(wati_message.message, WatiService.get_reciever_for_visitor(wati_message.visitor), eta=eta)
+            messages = wati_message.message.get_descendants_for_action_performed(Message.ON_MESSAGE_DELIVERED)
+            for message in messages:
+                MessageService.schedule_message(
+                    message,
+                    WatiService.get_recievers_for_visitors(wati_message.visitor)
+                )
 
     @classmethod
     def process_message_read(cls, event_body):
@@ -219,14 +272,18 @@ class WatiService:
         except WatiMessage.DoesNotExist:
             return
         if wati_message.message.action == Message.ON_MESSAGE_READ:
-            eta = timezone.now() + timedelta(minutes=wati_message.message.schedule)
-            from app.tasks import schedule_message
-            schedule_message.apply_async(wati_message.message, WatiService.get_reciever_for_visitor(wati_message.visitor), eta=eta)
+            messages = wati_message.message.get_descendants_for_action_performed(Message.ON_MESSAGE_READ)
+            for message in messages:
+                MessageService.schedule_message(
+                    message,
+                    WatiService.get_recievers_for_visitors(wati_message.visitor)
+                )
 
     @classmethod
-    def get_reciever_for_visitor(cls, visitor):
-        receiver = [
-            {
+    def get_recievers_for_visitors(cls, visitors):
+        receivers = []
+        for visitor in visitors:
+            receiver = {
                 "whatsappNumber": "string",
                 "customParams": [
                     {
@@ -239,38 +296,8 @@ class WatiService:
                     }
                 ]
             }
-        ]
-        return receiver
-
-
-class CampaignService:
-    @classmethod
-    def create(cls, data):
-        account = get_current_account()
-        data['account'] = account.id
-
-        campaign_serializer = CampaignSerializer(data=data)
-        campaign_serializer.is_valid(raise_exception=True)
-
-        campaign = campaign_serializer.save()
-
-        return campaign
-
-    @classmethod
-    def update(cls, instance, data, partial=False):
-        account = get_current_account()
-        data['account'] = account.id
-
-        campaign_serializer = CampaignSerializer(instance, data=data, partial=partial)
-        campaign_serializer.is_valid(raise_exception=True)
-
-        campaign = campaign_serializer.save()
-
-        return campaign
-
-    @classmethod
-    def delete(cls, instance):
-        instance.delete()
+            receivers.append(receiver)
+        return receivers
 
 
 class MessageService:
@@ -285,3 +312,9 @@ class MessageService:
     @classmethod
     def delete(cls, instance):
         instance.delete()
+
+    @classmethod
+    def schedule_message(cls, message, receivers):
+        eta = timezone.now() + timedelta(minutes=message.schedule)
+        from app.tasks import schedule_message
+        schedule_message.apply_async(message, receivers, eta=eta)

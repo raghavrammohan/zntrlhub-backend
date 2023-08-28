@@ -73,6 +73,9 @@ class Segmentation(models.Model):
 
     objects = managers.SegmentationManager()
 
+    def get_campaigns(self):
+        return self.campaigns.all()
+
 
 class VisitorSegmentationMap(models.Model):
     visitor = models.ForeignKey(Visitor, on_delete=models.CASCADE)
@@ -163,6 +166,12 @@ class Message(models.Model):
 
     class Meta:
         unique_together = ('parent', 'action',)
+
+    def get_head_message(self):
+        parent = self.parent
+        while parent is not None:
+            parent = parent.parent
+        return parent
 
     def get_descendants(self):
         descendants = Message.objects.filter(parent=self)
