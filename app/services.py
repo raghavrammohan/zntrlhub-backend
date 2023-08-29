@@ -162,7 +162,7 @@ class SegmentationService:
             visitor_segmentation_map_objs.append(visitor_segmentation_map)
             if created:
                 created_objs.append(visitor_segmentation_map)
-        VisitorSegmentationMap.objects.exclude(pk__in=[obj.pk for obj in visitor_segmentation_map_objs]).delete()
+        # VisitorSegmentationMap.objects.exclude(pk__in=[obj.pk for obj in visitor_segmentation_map_objs]).delete()
 
         for campaign in segmentation.get_campaigns():
             CampaignService.schedule_initial_message(
@@ -273,6 +273,21 @@ class WatiService:
             return
         if wati_message.message.action == Message.ON_MESSAGE_READ:
             messages = wati_message.message.get_descendants_for_action_performed(Message.ON_MESSAGE_READ)
+            for message in messages:
+                MessageService.schedule_message(
+                    message,
+                    WatiService.get_recievers_for_visitors(wati_message.visitor)
+                )
+    
+    @classmethod
+    def process_message_replied(cls, event_body):
+        wati_message_id = event_body.get('whatsappMessageId')
+        try:
+            wati_message = WatiMessage.objects.get(wati_message_id=wati_message_id)
+        except WatiMessage.DoesNotExist:
+            return
+        if wati_message.message.action == Message.ON_MESSAGE_REPLIED:
+            messages = wati_message.message.get_descendants_for_action_performed(Message.ON_MESSAGE_REPLIED)
             for message in messages:
                 MessageService.schedule_message(
                     message,

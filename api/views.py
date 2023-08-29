@@ -235,7 +235,7 @@ class WatiAuthAPIView(views.APIView):
                             status=status.HTTP_200_OK)
 
 
-class WatiEvents(views.APIView):
+class WatiEventsAPIView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
