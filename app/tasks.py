@@ -24,10 +24,11 @@ def sync_visitors_for_segmentation():
 
 
 @shared_task
-def schedule_message(message: Message, recievers: list):
+def schedule_message(message_id: int, recievers: list):
     '''
     This function is invoked to schedule a message.
     '''
+    message = Message.objects.get(id=message_id)
     account = message.campaign.account
     wati_attribute = WatiAttribute.objects.get_wati_attribute_for_account(account=account)
 

@@ -317,4 +317,4 @@ class MessageService:
     def schedule_message(cls, message, receivers):
         eta = timezone.now() + timedelta(minutes=message.schedule)
         from app.tasks import schedule_message
-        schedule_message.apply_async(message, receivers, eta=eta)
+        schedule_message.apply_async([message.id, receivers], eta=eta)
