@@ -32,10 +32,12 @@ def schedule_message(message_id: int, recievers: list):
     account = message.campaign.account
     wati_attribute = WatiAttribute.objects.get_wati_attribute_for_account(account=account)
 
-    wati = Wati(**wati_attribute.get_api_credentials())
-    wati.send_tempate_messages(
-        template_name=message.template,
-        broadcast_name=message.campaign.name,
-        recievers=recievers,
-        message=message
-    )
+    if wati_attribute.connected:
+
+        wati = Wati(**wati_attribute.get_api_credentials())
+        wati.send_tempate_messages(
+            template_name=message.template,
+            broadcast_name=message.campaign.name,
+            recievers=recievers,
+            message=message
+        )
