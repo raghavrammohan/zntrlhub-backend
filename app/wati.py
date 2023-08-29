@@ -80,7 +80,7 @@ class Wati:
             )
 
             wati_message_id = message_response['messages']['items'][0]['id']
-            visitor = Visitor.objects.get(id=receiver_phone_number)
+            visitor = Visitor.objects.get(whatsapp_number=receiver_phone_number)
             WatiMessage.objects.create(
                 wati_message_id=wati_message_id,
                 message=message,
