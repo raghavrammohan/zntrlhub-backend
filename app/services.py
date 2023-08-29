@@ -284,7 +284,7 @@ class WatiService:
         receivers = []
         for visitor in visitors:
             receiver = {
-                "whatsappNumber": "string",
+                "whatsappNumber": visitor.whatsapp_number,
                 "customParams": [
                     {
                     "name": "name",
