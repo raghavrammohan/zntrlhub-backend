@@ -117,7 +117,7 @@ class CampaignService:
         message = campaign.messages.first().get_head_message()
         MessageService.schedule_message(
             message=message,
-            receivers=visitors
+            receivers=WatiService.get_recievers_for_visitors(visitors)
         )
 
 
