@@ -168,10 +168,12 @@ class Message(models.Model):
         unique_together = ('parent', 'action',)
 
     def get_head_message(self):
+        head = self
         parent = self.parent
         while parent is not None:
+            head = parent
             parent = parent.parent
-        return parent
+        return head
 
     def get_descendants(self):
         descendants = Message.objects.filter(parent=self)
