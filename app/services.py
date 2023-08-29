@@ -132,6 +132,9 @@ class SegmentationService:
 
         segmentation = segmentation_serializer.save()
 
+        from app.tasks import sync_visitors_for_segmentation
+        sync_visitors_for_segmentation.delay()
+
         return segmentation
 
     @classmethod
@@ -205,6 +208,9 @@ class WatiService:
         if raise_exception:
             if status is False:
                 raise WatiConnectionError
+
+        from app.tasks import update_wati_template
+        update_wati_template.delay()
 
         return wati_attribute
 
