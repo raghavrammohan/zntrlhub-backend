@@ -328,6 +328,14 @@ class MessageService:
         message_serializer.is_valid(raise_exception=True)
 
         message = message_serializer.save()
+
+        if message.action == Message.MESSAGE_HEAD:
+            visitor_segmentation_map = VisitorSegmentationMap.objects.filter(segmentation=message.campaign.segment)
+            CampaignService.schedule_initial_message(
+                campaign=message.campaign,
+                visitors=[obj.visitor for obj in visitor_segmentation_map]
+            )
+
         return message
 
     @classmethod
