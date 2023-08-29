@@ -19,7 +19,7 @@ class Command(BaseCommand):
         CrontabSchedule.objects.all().delete()
 
         cron_every_15_minutes = CrontabSchedule.objects.create(
-            minute='*/15',
+            minute='*/1',
             hour='*',
             day_of_week='*',
             day_of_month='*',
